@@ -74,8 +74,15 @@
         </main>
 
         <!-- スポット表示エリア -->
-        <main id="spot-container" class="flex-1 overflow-y-auto bg-gray-100 pb-20 p-4 space-y-3 hidden relative">
-            <!-- JSで生成 -->
+        <main id="spot-container" class="flex-1 flex-col overflow-hidden bg-gray-100 pb-20 hidden relative">
+            <!-- フィルターバー -->
+            <div id="spot-filter-bar" class="bg-white border-b border-gray-200 px-3 py-2 flex gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
+                <!-- JSで生成 -->
+            </div>
+            <!-- カードリスト -->
+            <div id="spot-card-list" class="overflow-y-auto flex-1 p-4 space-y-3">
+                <!-- JSで生成 -->
+            </div>
         </main>
         
         <!-- 下部ナビゲーション -->
@@ -134,6 +141,7 @@
         let trips = [];
         let currentTripId = null;
         let currentTab = 'schedule';
+        let activeSpotFilter = 'すべて';
 
         // === ユーティリティ関数 ===
         function getIcon(type) {
@@ -144,6 +152,9 @@
             if (type.includes('散策') || type.includes('徒歩') || type.includes('歩き')) return '🚶';
             if (type.includes('バス')) return '🚌';
             if (type.includes('宿泊') || type.includes('ホテル')) return '🏨';
+            if (type.includes('朝食')) return '🍙';
+            if (type.includes('昼食')) return '🍜';
+            if (type.includes('夕食')) return '🍻';
             if (type.includes('食事') || type.includes('レストラン') || type.includes('カフェ')) return '🍽️';
             if (type.includes('観光')) return '📸';
             return '🔹';
@@ -153,7 +164,8 @@
             if (!category) return '📍';
             if (category.includes('街並み') || category.includes('風景')) return '🏘️';
             if (category.includes('鉄道') || category.includes('駅')) return '🚃';
-            if (category.includes('食') || category.includes('グルメ')) return '🍜';
+            if (category.includes('食事') || category.includes('食')) return '🍽️';
+            if (category.includes('グルメ')) return '🍜';
             if (category.includes('城') || category.includes('歴史')) return '🏯';
             if (category.includes('自然') || category.includes('公園')) return '🌳';
             return '📍';
@@ -372,16 +384,19 @@
         }
 
         function renderSpots(rawData) {
-            const container = document.getElementById('spot-container');
-            container.innerHTML = '';
+            const filterBar = document.getElementById('spot-filter-bar');
+            const cardList = document.getElementById('spot-card-list');
+            filterBar.innerHTML = '';
+            cardList.innerHTML = '';
 
             if (!rawData || !rawData.trim()) {
-                container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-400 mt-20"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg><p>スポットデータがありません</p></div>';
+                cardList.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-400 mt-20"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg><p>スポットデータがありません</p></div>';
                 return;
             }
 
             const lines = rawData.split('\n');
-            let hasValidData = false;
+            const spots = [];
+            const categories = [];
 
             lines.forEach(line => {
                 const cols = line.split('\t');
@@ -394,50 +409,87 @@
                 const description = cols[4] ? cols[4].trim() : '';
 
                 if (category === 'カテゴリ' || !name) return;
-                hasValidData = true;
 
+                spots.push({ category, status, name, access, description });
+                if (category && !categories.includes(category)) categories.push(category);
+            });
+
+            if (spots.length === 0) {
+                cardList.innerHTML = '<p class="text-gray-500 text-center mt-8 text-sm">有効なスポットデータが見つかりません。</p>';
+                return;
+            }
+
+            // フィルターボタン生成
+            const allFilters = ['すべて', ...categories];
+            allFilters.forEach(cat => {
+                const btn = document.createElement('button');
+                const isActive = activeSpotFilter === cat;
+                btn.className = `flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition
+                    ${isActive
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400 hover:text-blue-600'}`;
+                const icon = cat === 'すべて' ? '🗺️' : getSpotIcon(cat);
+                btn.innerHTML = `<span>${icon}</span><span>${cat}</span>`;
+                btn.addEventListener('click', () => {
+                    activeSpotFilter = cat;
+                    renderSpots(rawData);
+                });
+                filterBar.appendChild(btn);
+            });
+
+            // 件数バッジ（すべてボタンに表示）
+            const countSpan = filterBar.querySelector('button:first-child span:last-child');
+            if (countSpan) countSpan.textContent = `すべて`;
+
+            // カード描画（フィルター適用）
+            const filtered = activeSpotFilter === 'すべて'
+                ? spots
+                : spots.filter(s => s.category === activeSpotFilter);
+
+            if (filtered.length === 0) {
+                cardList.innerHTML = `<p class="text-gray-500 text-center mt-8 text-sm">「${activeSpotFilter}」のスポットはありません。</p>`;
+                return;
+            }
+
+            filtered.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'bg-white rounded-xl shadow-sm p-4 border border-gray-200 relative overflow-hidden';
-                const icon = getSpotIcon(category);
-                
+                const icon = getSpotIcon(item.category);
+
                 let statusBadge = '';
-                if (status) {
+                if (item.status) {
                     let statusClass = 'bg-gray-100 text-gray-600 border-gray-200';
-                    if (status.includes('採用')) statusClass = 'bg-green-50 text-green-700 border-green-200 font-bold';
-                    else if (status.includes('候補')) statusClass = 'bg-orange-50 text-orange-700 border-orange-200';
-                    statusBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full border ${statusClass}">${status}</span>`;
+                    if (item.status.includes('採用')) statusClass = 'bg-green-50 text-green-700 border-green-200 font-bold';
+                    else if (item.status.includes('候補')) statusClass = 'bg-orange-50 text-orange-700 border-orange-200';
+                    statusBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full border ${statusClass}">${item.status}</span>`;
                 }
 
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-2 gap-2">
                         <div class="flex items-start gap-2">
                             <span class="text-xl mt-0.5">${icon}</span>
-                            <h3 class="font-bold text-gray-900 text-base leading-tight">${name}</h3>
+                            <h3 class="font-bold text-gray-900 text-base leading-tight">${item.name}</h3>
                         </div>
                     </div>
                     <div class="flex flex-wrap gap-2 mb-3 items-center">
-                        ${category ? `<span class="text-[10px] px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200 font-medium">${category}</span>` : ''}
+                        ${item.category ? `<span class="text-[10px] px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200 font-medium">${item.category}</span>` : ''}
                         ${statusBadge}
                     </div>
-                    ${access ? `
+                    ${item.access ? `
                     <div class="text-xs text-gray-600 flex items-start gap-1.5 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mt-0.5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span class="leading-tight">${access}</span>
+                        <span class="leading-tight">${item.access}</span>
                     </div>` : ''}
-                    ${description ? `
+                    ${item.description ? `
                     <div class="text-sm text-gray-700 bg-blue-50/50 p-3 rounded-lg mt-2 border border-blue-100 leading-relaxed">
-                        ${description}
+                        ${item.description}
                     </div>` : ''}
                 `;
-                container.appendChild(card);
+                cardList.appendChild(card);
             });
-
-            if (!hasValidData) {
-                container.innerHTML = '<p class="text-gray-500 text-center mt-8 text-sm">有効なスポットデータが見つかりません。</p>';
-            }
         }
 
         function renderTripList() {
@@ -475,6 +527,7 @@
             if (tab === 'schedule') {
                 scheduleContainer.classList.remove('hidden');
                 spotContainer.classList.add('hidden');
+                spotContainer.classList.remove('flex');
                 tabSchedule.classList.replace('text-gray-400', 'text-blue-600');
                 tabSchedule.classList.replace('border-transparent', 'border-blue-600');
                 tabSpots.classList.replace('text-blue-600', 'text-gray-400');
@@ -482,6 +535,7 @@
             } else {
                 scheduleContainer.classList.add('hidden');
                 spotContainer.classList.remove('hidden');
+                spotContainer.classList.add('flex');
                 tabSpots.classList.replace('text-gray-400', 'text-blue-600');
                 tabSpots.classList.replace('border-transparent', 'border-blue-600');
                 tabSchedule.classList.replace('text-blue-600', 'text-gray-400');
@@ -554,6 +608,7 @@
 
         function selectTrip(id) {
             currentTripId = id;
+            activeSpotFilter = 'すべて';
             saveToStorage();
             renderApp();
             toggleSelectorModal(false);
