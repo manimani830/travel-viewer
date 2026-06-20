@@ -43,7 +43,7 @@
         </header>
 
         <!-- 入力エリア（モーダル） -->
-        <div id="input-area" class="bg-white absolute inset-0 z-30 h-full overflow-y-auto pb-20 p-4 hidden flex-col">
+        <div id="input-area" class="bg-white fixed inset-0 z-30 h-full overflow-y-auto pb-20 p-4 hidden flex-col max-w-md mx-auto">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-lg font-bold text-gray-800">データ入力</h2>
                 <button id="close-input-btn" class="text-gray-500 hover:bg-gray-200 px-3 py-1 rounded text-sm font-bold">✕ 閉じる</button>
@@ -96,9 +96,9 @@
         </nav>
 
         <!-- 旅行切り替えボトムシート（モーダル） -->
-        <div id="trip-selector-modal" class="absolute inset-0 z-40 hidden flex-col justify-end">
+        <div id="trip-selector-modal" class="fixed inset-0 z-50 hidden flex-col justify-end">
             <div id="trip-selector-overlay" class="absolute inset-0 bg-black bg-opacity-40"></div>
-            <div id="trip-selector-content" class="bg-white rounded-t-2xl z-10 w-full max-h-[80%] flex flex-col shadow-2xl relative translate-y-full">
+            <div id="trip-selector-content" class="bg-white rounded-t-2xl z-10 w-full max-w-md mx-auto max-h-[80%] flex flex-col shadow-2xl relative translate-y-full">
                 <div class="p-4 border-b flex justify-between items-center">
                     <h2 class="font-bold text-lg text-gray-800">旅行を切り替える</h2>
                     <button id="close-selector-btn" class="text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-full p-1.5 transition">
@@ -236,6 +236,33 @@
             renderSpots(trip.spotData);
         }
 
+        // === 折りたたみ状態の管理 ===
+        function getCollapseState() {
+            try {
+                return JSON.parse(localStorage.getItem('travelApp_collapseState') || '{}');
+            } catch { return {}; }
+        }
+
+        function setCollapseState(date, collapsed) {
+            const state = getCollapseState();
+            state[date] = collapsed;
+            localStorage.setItem('travelApp_collapseState', JSON.stringify(state));
+        }
+
+        function toggleDateSection(date, bodyEl, chevronEl) {
+            const state = getCollapseState();
+            const isCollapsed = state[date] || false;
+            const newCollapsed = !isCollapsed;
+            setCollapseState(date, newCollapsed);
+            if (newCollapsed) {
+                bodyEl.style.display = 'none';
+                chevronEl.style.transform = 'rotate(-90deg)';
+            } else {
+                bodyEl.style.display = '';
+                chevronEl.style.transform = '';
+            }
+        }
+
         function renderSchedule(rawData) {
             const container = document.getElementById('schedule-container');
             container.innerHTML = '';
@@ -247,6 +274,7 @@
 
             const lines = rawData.split('\n');
             const schedule = {};
+            const dateOrder = [];
             let hasValidData = false;
 
             lines.forEach(line => {
@@ -262,7 +290,10 @@
                 if (date === '日付' || !time || !action) return;
                 
                 hasValidData = true;
-                if (!schedule[date]) schedule[date] = [];
+                if (!schedule[date]) {
+                    schedule[date] = [];
+                    dateOrder.push(date);
+                }
                 schedule[date].push({ time, type, action, note });
             });
 
@@ -271,11 +302,48 @@
                 return;
             }
 
-            for (const [date, items] of Object.entries(schedule)) {
+            const collapseState = getCollapseState();
+
+            dateOrder.forEach(date => {
+                const items = schedule[date];
+                const isCollapsed = collapseState[date] || false;
+
+                // 日付セクションラッパー
+                const section = document.createElement('div');
+
+                // 日付ヘッダー（折りたたみトグル）
                 const dateHeader = document.createElement('div');
-                dateHeader.className = 'bg-gray-100 px-4 py-2.5 text-gray-800 font-bold border-b border-t text-base sticky top-0 z-0 shadow-sm';
-                dateHeader.textContent = date;
-                container.appendChild(dateHeader);
+                dateHeader.className = 'bg-blue-50 px-4 py-3 border-b border-t border-blue-200 sticky top-0 z-10 shadow-sm cursor-pointer select-none flex items-center justify-between';
+                dateHeader.style.cssText = 'border-left: 4px solid #2563eb;';
+
+                const chevron = document.createElement('svg');
+                chevron.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                chevron.setAttribute('viewBox', '0 0 20 20');
+                chevron.setAttribute('fill', 'currentColor');
+                chevron.className = 'h-5 w-5 text-blue-400 flex-shrink-0 transition-transform duration-200';
+                chevron.style.transform = isCollapsed ? 'rotate(-90deg)' : '';
+                chevron.innerHTML = '<path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />';
+
+                const dateText = document.createElement('span');
+                dateText.className = 'text-blue-900 font-bold';
+                dateText.style.fontSize = '1.125rem';
+                dateText.textContent = date;
+
+                const countBadge = document.createElement('span');
+                countBadge.className = 'text-xs text-blue-500 ml-2 font-normal';
+                countBadge.textContent = `${items.length}件`;
+
+                const leftGroup = document.createElement('div');
+                leftGroup.className = 'flex items-center gap-2';
+                leftGroup.appendChild(dateText);
+                leftGroup.appendChild(countBadge);
+
+                dateHeader.appendChild(leftGroup);
+                dateHeader.appendChild(chevron);
+
+                // カードをまとめるボディ
+                const body = document.createElement('div');
+                body.style.display = isCollapsed ? 'none' : '';
 
                 items.forEach(item => {
                     const card = document.createElement('div');
@@ -292,9 +360,15 @@
                         </div>
                         ${item.note ? `<div class="text-sm text-gray-600 mt-2 pl-[3.25rem]">${item.note}</div>` : ''}
                     `;
-                    container.appendChild(card);
+                    body.appendChild(card);
                 });
-            }
+
+                dateHeader.addEventListener('click', () => toggleDateSection(date, body, chevron));
+
+                section.appendChild(dateHeader);
+                section.appendChild(body);
+                container.appendChild(section);
+            });
         }
 
         function renderSpots(rawData) {
