@@ -6,69 +6,136 @@
     <title>旅行スケジュールビューア</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* スクロールバーを隠す（スマホライクな見た目にするため） */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* ボトムシートのアニメーション用 */
+        .slide-up { animation: slideUp 0.3s ease-out forwards; }
+        .slide-down { animation: slideDown 0.3s ease-in forwards; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideDown { from { transform: translateY(0); } to { transform: translateY(100%); } }
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .fade-out { animation: fadeOut 0.3s ease-in forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
     </style>
 </head>
 <body class="bg-gray-200 flex justify-center min-h-screen">
 
     <!-- スマホサイズのコンテナ -->
-    <div class="w-full max-w-md bg-white shadow-xl min-h-screen flex flex-col relative">
+    <div class="w-full max-w-md bg-white shadow-xl min-h-screen flex flex-col relative overflow-hidden">
         
         <!-- ヘッダー -->
         <header class="bg-blue-600 text-white p-4 shadow-md z-10 flex justify-between items-center sticky top-0">
-            <h1 class="text-lg font-bold">行程</h1>
-            <button id="edit-btn" class="text-sm bg-blue-700 hover:bg-blue-800 px-3 py-1 rounded">データ入力</button>
+            <!-- 旅行切り替えボタン -->
+            <button id="trip-selector-trigger" class="flex items-center gap-1 text-lg font-bold hover:bg-blue-700 px-2 py-1 -ml-2 rounded transition">
+                <span id="current-trip-name" class="truncate max-w-[160px]">旅行名</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+            </button>
+            <button id="edit-btn" class="text-sm bg-blue-700 hover:bg-blue-800 px-3 py-1.5 rounded flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+                データ入力
+            </button>
         </header>
 
-        <!-- 入力エリア（初期表示、または「データ入力」ボタンで表示） -->
-        <div id="input-area" class="p-4 bg-gray-50 border-b relative z-0">
-            <p class="text-sm text-gray-600 mb-2 font-bold">
-                スプレッドシートのデータをコピーして、下の枠に貼り付けてください。
-            </p>
-            <textarea id="tsv-input" class="w-full h-32 p-2 border border-gray-300 rounded text-xs no-scrollbar focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-pre" placeholder="ここにスプレッドシートのセルを貼り付け"></textarea>
-            <button id="render-btn" class="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded shadow transition">
-                スケジュールに変換する
+        <!-- 入力エリア（モーダル） -->
+        <div id="input-area" class="bg-white absolute inset-0 z-30 h-full overflow-y-auto pb-20 p-4 hidden flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-bold text-gray-800">データ入力</h2>
+                <button id="close-input-btn" class="text-gray-500 hover:bg-gray-200 px-3 py-1 rounded text-sm font-bold">✕ 閉じる</button>
+            </div>
+            
+            <p class="text-sm text-gray-600 mb-1 font-bold">旅行名</p>
+            <input type="text" id="trip-name-input" class="w-full p-2 mb-6 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold" placeholder="例：秋の京都旅行">
+
+            <p class="text-sm text-gray-600 mb-1 font-bold">行程（タイムスケジュール）</p>
+            <p class="text-xs text-gray-500 mb-2">「行程」シートのセルをコピーして貼り付け</p>
+            <textarea id="tsv-input" class="w-full h-32 p-2 mb-6 border border-gray-300 rounded text-xs no-scrollbar focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-pre" placeholder=""></textarea>
+
+            <p class="text-sm text-gray-600 mb-1 font-bold">スポット一覧</p>
+            <p class="text-xs text-gray-500 mb-2">「スポット」シートのセルをコピーして貼り付け</p>
+            <textarea id="spot-input" class="w-full h-32 p-2 border border-gray-300 rounded text-xs no-scrollbar focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-pre" placeholder=""></textarea>
+
+            <button id="save-btn" class="mt-6 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded shadow transition flex justify-center items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                </svg>
+                保存して更新する
             </button>
         </div>
 
         <!-- スケジュール表示エリア -->
-        <main id="schedule-container" class="flex-1 overflow-y-auto bg-white pb-20">
-            <!-- ここにJavaScriptでスケジュールが生成されます -->
+        <main id="schedule-container" class="flex-1 overflow-y-auto bg-white pb-20 relative">
+            <!-- JSで生成 -->
+        </main>
+
+        <!-- スポット表示エリア -->
+        <main id="spot-container" class="flex-1 overflow-y-auto bg-gray-100 pb-20 p-4 space-y-3 hidden relative">
+            <!-- JSで生成 -->
         </main>
         
-        <!-- 下部ナビゲーション（AppSheet風の装飾） -->
-        <nav class="bg-white border-t p-2 flex justify-center items-center fixed bottom-0 w-full max-w-md">
-            <div class="flex flex-col items-center text-blue-600">
+        <!-- 下部ナビゲーション -->
+        <nav class="bg-white border-t flex justify-around items-center fixed bottom-0 w-full max-w-md pb-safe z-10">
+            <button id="tab-schedule" class="flex flex-col items-center flex-1 py-2 text-blue-600 border-t-2 border-blue-600 transition">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span class="text-xs font-bold mt-1">行程</span>
-            </div>
+            </button>
+            <button id="tab-spots" class="flex flex-col items-center flex-1 py-2 text-gray-400 border-t-2 border-transparent transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span class="text-xs font-bold mt-1">スポット</span>
+            </button>
         </nav>
+
+        <!-- 旅行切り替えボトムシート（モーダル） -->
+        <div id="trip-selector-modal" class="absolute inset-0 z-40 hidden flex-col justify-end">
+            <div id="trip-selector-overlay" class="absolute inset-0 bg-black bg-opacity-40"></div>
+            <div id="trip-selector-content" class="bg-white rounded-t-2xl z-10 w-full max-h-[80%] flex flex-col shadow-2xl relative translate-y-full">
+                <div class="p-4 border-b flex justify-between items-center">
+                    <h2 class="font-bold text-lg text-gray-800">旅行を切り替える</h2>
+                    <button id="close-selector-btn" class="text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-full p-1.5 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="overflow-y-auto p-4 flex-1">
+                    <ul id="trip-list" class="space-y-3">
+                        <!-- JSでリストを生成 -->
+                    </ul>
+                </div>
+                <div class="p-4 border-t bg-gray-50">
+                    <button id="add-trip-btn" class="w-full py-3 bg-white border-2 border-blue-500 text-blue-600 font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-blue-50 transition shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
+                        </svg>
+                        新しい旅行を追加
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
-        // デフォルトのサンプルデータ（ユーザーの入力を元に作成）
-        const defaultData = `日付	時間	種別	行動	移動・備考
-7/11(土)				
-07/11	9:30	出発	阿南市 -> 徳島空港	自家用車・約60分〜90分。空港駐車場を利用
-07/11	11:30	フライト	徳島空港 -> 福岡空港	JAL3564便（直行便）。12:35到着
-07/11	13:00	鉄道	福岡空港 -> 博多駅	地下鉄空港線（約5分）。特急への乗り継ぎ
-07/11	13:19	鉄道	博多駅 -> 黒崎駅	特急ソニック29号。13:56黒崎着。
-				
-7/12(日)				
-07/12	9:00	鉄道	通町筋 -> 上熊本	【熊本市電（B系統）】まずはB系統の北の起点へ。
-07/12	9:30	鉄道	上熊本 -> 新町	【熊本市電】折り返して新町へ。古い街並みの中を市電がすり抜けるハイライト区間。
-07/12	14:40	散策	木屋瀬駅周辺	途中下車。古い街並みを散策。`;
+        // === デフォルトデータ ===
+        const defaultData = `日付	時間	種別	行動	移動・備考\n7/11(土)\n07/11	9:30	出発	阿南市 -> 徳島空港	自家用車・約60分〜90分。空港駐車場を利用\n07/11	11:30	フライト	徳島空港 -> 福岡空港	JAL3564便（直行便）。12:35到着\n07/11	13:00	鉄道	福岡空港 -> 博多駅	地下鉄空港線（約5分）。特急への乗り継ぎ\n07/11	13:19	鉄道	博多駅 -> 黒崎駅	特急ソニック29号。13:56黒崎着。\n7/12(日)\n07/12	9:00	鉄道	通町筋 -> 上熊本	【熊本市電（B系統）】まずはB系統の北の起点へ。\n07/12	9:30	鉄道	上熊本 -> 新町	【熊本市電】折り返して新町へ。古い街並みの中を市電がすり抜けるハイライト区間。\n07/12	14:40	散策	木屋瀬駅周辺	途中下車。古い街並みを散策。`;
+        const defaultSpotData = `カテゴリ	採用状況	スポット名	アクセス	特徴・魅力（歴史的背景や見どころの解説）\n街並み	採用	新町・古町エリア（長崎次郎書店など）	熊本市電「新町」「洗馬橋」付近	熊本城の城下町として栄えた問屋街。大正4年築の「長崎次郎書店」などレトロな建築が軒を連ね、そのすぐ目の前を市電がゴトゴトと横切る極上空間。\n鉄道	採用	熊本市交通局 大江車庫	熊本市電「交通局前」すぐ	熊本市電の心臓部。敷地外からでも待機している色とりどりのレトロ車両や超低床電車を一望できる。\n食	採用	熊本ラーメン（黒亭など）	熊本駅周辺・市街地各所	豚骨スープに、焦がしニンニク油（マー油）とフライドガーリックを効かせた、ガツンとくるパンチの強さが特徴。`;
 
-        // 種別に応じた絵文字アイコンを返す関数
+        // === アプリの状態管理 ===
+        let trips = [];
+        let currentTripId = null;
+        let currentTab = 'schedule';
+
+        // === ユーティリティ関数 ===
         function getIcon(type) {
             if (!type) return '';
             if (type.includes('出発') || type.includes('車')) return '🚗';
@@ -79,25 +146,111 @@
             if (type.includes('宿泊') || type.includes('ホテル')) return '🏨';
             if (type.includes('食事') || type.includes('レストラン') || type.includes('カフェ')) return '🍽️';
             if (type.includes('観光')) return '📸';
-            return '🔹'; // デフォルトアイコン
+            return '🔹';
         }
 
-        // データを解析してHTMLを生成する関数
-        function renderSchedule() {
-            const inputData = document.getElementById('tsv-input').value;
-            if (!inputData.trim()) return;
+        function getSpotIcon(category) {
+            if (!category) return '📍';
+            if (category.includes('街並み') || category.includes('風景')) return '🏘️';
+            if (category.includes('鉄道') || category.includes('駅')) return '🚃';
+            if (category.includes('食') || category.includes('グルメ')) return '🍜';
+            if (category.includes('城') || category.includes('歴史')) return '🏯';
+            if (category.includes('自然') || category.includes('公園')) return '🌳';
+            return '📍';
+        }
 
-            // ローカルストレージに保存（リロードしてもデータが消えないように）
-            localStorage.setItem('savedScheduleData', inputData);
+        function generateId() {
+            return 'trip_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
 
-            const lines = inputData.split('\n');
+        // === データ管理 ===
+        function loadData() {
+            const savedTrips = localStorage.getItem('travelApp_trips');
+            const savedCurrentId = localStorage.getItem('travelApp_currentTripId');
+            
+            // 旧バージョンのデータ移行処理
+            const oldSchedule = localStorage.getItem('savedScheduleData');
+            const oldSpot = localStorage.getItem('savedSpotData');
+
+            if (savedTrips) {
+                trips = JSON.parse(savedTrips);
+                currentTripId = savedCurrentId;
+            } else if (oldSchedule || oldSpot) {
+                // 旧バージョンからの移行
+                const newTrip = {
+                    id: generateId(),
+                    name: '最初の旅行',
+                    scheduleData: oldSchedule || '',
+                    spotData: oldSpot || ''
+                };
+                trips.push(newTrip);
+                currentTripId = newTrip.id;
+                // 古いキーを削除
+                localStorage.removeItem('savedScheduleData');
+                localStorage.removeItem('savedSpotData');
+                saveToStorage();
+            }
+
+            // 何もなければデフォルト旅行を作成
+            if (trips.length === 0) {
+                createDefaultTrip();
+            }
+
+            // 現在のIDが存在しない場合（エラー回避）
+            if (!trips.find(t => t.id === currentTripId)) {
+                currentTripId = trips[0].id;
+            }
+        }
+
+        function saveToStorage() {
+            localStorage.setItem('travelApp_trips', JSON.stringify(trips));
+            localStorage.setItem('travelApp_currentTripId', currentTripId);
+        }
+
+        function createDefaultTrip() {
+            const trip = {
+                id: generateId(),
+                name: '九州旅行（サンプル）',
+                scheduleData: defaultData,
+                spotData: defaultSpotData
+            };
+            trips.push(trip);
+            currentTripId = trip.id;
+            saveToStorage();
+        }
+
+        function getCurrentTrip() {
+            return trips.find(t => t.id === currentTripId);
+        }
+
+        // === レンダリング処理 ===
+        function renderApp() {
+            const trip = getCurrentTrip();
+            if (!trip) return;
+
+            // ヘッダー更新
+            document.getElementById('current-trip-name').textContent = trip.name;
+
+            // タブコンテンツ更新
+            renderSchedule(trip.scheduleData);
+            renderSpots(trip.spotData);
+        }
+
+        function renderSchedule(rawData) {
+            const container = document.getElementById('schedule-container');
+            container.innerHTML = '';
+
+            if (!rawData || !rawData.trim()) {
+                container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-400 mt-20"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><p>行程データがありません</p></div>';
+                return;
+            }
+
+            const lines = rawData.split('\n');
             const schedule = {};
+            let hasValidData = false;
 
-            // TSV（タブ区切り）データを解析して日付ごとにグループ化
             lines.forEach(line => {
                 const cols = line.split('\t');
-                
-                // 列が少ない、または完全な空白行はスキップ（AppSheetの Slice "ISNOTBLANK" と同じ効果）
                 if (cols.length < 3) return; 
 
                 const date = cols[0] ? cols[0].trim() : '';
@@ -106,84 +259,293 @@
                 const action = cols[3] ? cols[3].trim() : '';
                 const note = cols[4] ? cols[4].trim() : '';
 
-                // 見出し行「日付 時間 種別...」や、行動が入っていない行はスキップ
                 if (date === '日付' || !time || !action) return;
-
-                // 2026/07/11 のような年付きの表記や 7/11(土) のような表記を統一キーにするための処理
-                const dateKey = date; 
-
-                if (!schedule[dateKey]) {
-                    schedule[dateKey] = [];
-                }
                 
-                schedule[dateKey].push({ time, type, action, note });
+                hasValidData = true;
+                if (!schedule[date]) schedule[date] = [];
+                schedule[date].push({ time, type, action, note });
             });
 
-            // HTMLの構築
-            const container = document.getElementById('schedule-container');
-            container.innerHTML = '';
-
-            if (Object.keys(schedule).length === 0) {
+            if (!hasValidData) {
                 container.innerHTML = '<p class="p-4 text-gray-500 text-center">有効なデータが見つかりません。形式を確認してください。</p>';
                 return;
             }
 
             for (const [date, items] of Object.entries(schedule)) {
-                // 日付ヘッダー
                 const dateHeader = document.createElement('div');
-                dateHeader.className = 'bg-gray-100 px-4 py-2 text-gray-700 font-bold border-b border-t text-sm sticky top-0 z-0';
+                dateHeader.className = 'bg-gray-100 px-4 py-2.5 text-gray-800 font-bold border-b border-t text-base sticky top-0 z-0 shadow-sm';
                 dateHeader.textContent = date;
                 container.appendChild(dateHeader);
 
-                // スケジュールカードの生成（AppSheetのDeckビュー風）
                 items.forEach(item => {
                     const card = document.createElement('div');
-                    card.className = 'border-b border-gray-200 p-4 hover:bg-gray-50 transition';
-                    
+                    card.className = 'border-b border-gray-200 p-4 hover:bg-gray-50 transition bg-white';
                     const icon = getIcon(item.type);
-
                     card.innerHTML = `
                         <div class="flex justify-between items-start mb-1">
-                            <!-- 時間と行動（仮想列 [表示用_時間行動] と同じ効果） -->
-                            <div class="text-base text-gray-900 leading-tight">
-                                <span class="font-bold mr-1">${item.time}</span> ${item.action}
+                            <div class="text-base text-gray-900 leading-tight pr-2">
+                                <span class="font-bold mr-1 text-blue-900">${item.time}</span> ${item.action}
                             </div>
-                            <!-- アイコンと種別（仮想列 [絵文字アイコン] と同じ効果） -->
-                            <div class="text-xs text-gray-500 flex items-center ml-2 whitespace-nowrap bg-gray-100 px-2 py-1 rounded">
+                            <div class="text-xs text-gray-600 flex items-center ml-auto whitespace-nowrap bg-gray-100 px-2 py-1 rounded-md font-medium border border-gray-200">
                                 <span class="text-sm mr-1">${icon}</span>${item.type}
                             </div>
                         </div>
-                        <!-- 備考（もしあれば表示） -->
-                        ${item.note ? `<div class="text-sm text-gray-600 mt-2">${item.note}</div>` : ''}
+                        ${item.note ? `<div class="text-sm text-gray-600 mt-2 pl-[3.25rem]">${item.note}</div>` : ''}
                     `;
                     container.appendChild(card);
                 });
             }
-
-            // 入力エリアを隠してスッキリさせる
-            document.getElementById('input-area').classList.add('hidden');
         }
 
-        // イベントリスナーの設定
-        document.getElementById('render-btn').addEventListener('click', renderSchedule);
-        
-        document.getElementById('edit-btn').addEventListener('click', () => {
+        function renderSpots(rawData) {
+            const container = document.getElementById('spot-container');
+            container.innerHTML = '';
+
+            if (!rawData || !rawData.trim()) {
+                container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-gray-400 mt-20"><svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg><p>スポットデータがありません</p></div>';
+                return;
+            }
+
+            const lines = rawData.split('\n');
+            let hasValidData = false;
+
+            lines.forEach(line => {
+                const cols = line.split('\t');
+                if (cols.length < 3) return;
+
+                const category = cols[0] ? cols[0].trim() : '';
+                const status = cols[1] ? cols[1].trim() : '';
+                const name = cols[2] ? cols[2].trim() : '';
+                const access = cols[3] ? cols[3].trim() : '';
+                const description = cols[4] ? cols[4].trim() : '';
+
+                if (category === 'カテゴリ' || !name) return;
+                hasValidData = true;
+
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-xl shadow-sm p-4 border border-gray-200 relative overflow-hidden';
+                const icon = getSpotIcon(category);
+                
+                let statusBadge = '';
+                if (status) {
+                    let statusClass = 'bg-gray-100 text-gray-600 border-gray-200';
+                    if (status.includes('採用')) statusClass = 'bg-green-50 text-green-700 border-green-200 font-bold';
+                    else if (status.includes('候補')) statusClass = 'bg-orange-50 text-orange-700 border-orange-200';
+                    statusBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full border ${statusClass}">${status}</span>`;
+                }
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2 gap-2">
+                        <div class="flex items-start gap-2">
+                            <span class="text-xl mt-0.5">${icon}</span>
+                            <h3 class="font-bold text-gray-900 text-base leading-tight">${name}</h3>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 mb-3 items-center">
+                        ${category ? `<span class="text-[10px] px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200 font-medium">${category}</span>` : ''}
+                        ${statusBadge}
+                    </div>
+                    ${access ? `
+                    <div class="text-xs text-gray-600 flex items-start gap-1.5 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mt-0.5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span class="leading-tight">${access}</span>
+                    </div>` : ''}
+                    ${description ? `
+                    <div class="text-sm text-gray-700 bg-blue-50/50 p-3 rounded-lg mt-2 border border-blue-100 leading-relaxed">
+                        ${description}
+                    </div>` : ''}
+                `;
+                container.appendChild(card);
+            });
+
+            if (!hasValidData) {
+                container.innerHTML = '<p class="text-gray-500 text-center mt-8 text-sm">有効なスポットデータが見つかりません。</p>';
+            }
+        }
+
+        function renderTripList() {
+            const listContainer = document.getElementById('trip-list');
+            listContainer.innerHTML = '';
+
+            trips.forEach(trip => {
+                const isActive = trip.id === currentTripId;
+                const li = document.createElement('li');
+                li.className = `flex justify-between items-center p-3 rounded-xl border-2 cursor-pointer transition ${isActive ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`;
+                
+                li.innerHTML = `
+                    <div class="flex items-center gap-3 overflow-hidden flex-1" onclick="selectTrip('${trip.id}')">
+                        <div class="w-2 h-2 rounded-full ${isActive ? 'bg-blue-500' : 'bg-transparent'} flex-shrink-0"></div>
+                        <span class="font-bold text-gray-800 truncate ${isActive ? 'text-blue-700' : ''}">${trip.name}</span>
+                    </div>
+                    <button onclick="deleteTrip('${trip.id}')" class="text-gray-400 hover:text-red-500 p-2 transition ml-2 flex-shrink-0" title="削除する">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                `;
+                listContainer.appendChild(li);
+            });
+        }
+
+        // === UIアクション ===
+        function switchTab(tab) {
+            currentTab = tab;
+            const scheduleContainer = document.getElementById('schedule-container');
+            const spotContainer = document.getElementById('spot-container');
+            const tabSchedule = document.getElementById('tab-schedule');
+            const tabSpots = document.getElementById('tab-spots');
+
+            if (tab === 'schedule') {
+                scheduleContainer.classList.remove('hidden');
+                spotContainer.classList.add('hidden');
+                tabSchedule.classList.replace('text-gray-400', 'text-blue-600');
+                tabSchedule.classList.replace('border-transparent', 'border-blue-600');
+                tabSpots.classList.replace('text-blue-600', 'text-gray-400');
+                tabSpots.classList.replace('border-blue-600', 'border-transparent');
+            } else {
+                scheduleContainer.classList.add('hidden');
+                spotContainer.classList.remove('hidden');
+                tabSpots.classList.replace('text-gray-400', 'text-blue-600');
+                tabSpots.classList.replace('border-transparent', 'border-blue-600');
+                tabSchedule.classList.replace('text-blue-600', 'text-gray-400');
+                tabSchedule.classList.replace('border-blue-600', 'border-transparent');
+            }
+        }
+
+        function openEditor() {
+            const trip = getCurrentTrip();
+            if (!trip) return;
+
+            document.getElementById('trip-name-input').value = trip.name;
+            document.getElementById('tsv-input').value = trip.scheduleData;
+            document.getElementById('spot-input').value = trip.spotData;
+            
             const inputArea = document.getElementById('input-area');
-            inputArea.classList.toggle('hidden');
+            inputArea.classList.remove('hidden', 'fade-out');
+            inputArea.classList.add('flex', 'fade-in');
+        }
+
+        function closeEditor() {
+            const inputArea = document.getElementById('input-area');
+            inputArea.classList.remove('fade-in');
+            inputArea.classList.add('fade-out');
+            setTimeout(() => {
+                inputArea.classList.add('hidden');
+                inputArea.classList.remove('flex');
+            }, 300);
+        }
+
+        function saveEditorData() {
+            const trip = getCurrentTrip();
+            if (!trip) return;
+
+            const newName = document.getElementById('trip-name-input').value.trim();
+            trip.name = newName || '名称未設定の旅行';
+            trip.scheduleData = document.getElementById('tsv-input').value;
+            trip.spotData = document.getElementById('spot-input').value;
+
+            saveToStorage();
+            renderApp();
+            closeEditor();
+        }
+
+        // === 旅行リストのアクション ===
+        function toggleSelectorModal(show) {
+            const modal = document.getElementById('trip-selector-modal');
+            const overlay = document.getElementById('trip-selector-overlay');
+            const content = document.getElementById('trip-selector-content');
+
+            if (show) {
+                renderTripList();
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                overlay.classList.remove('fade-out');
+                overlay.classList.add('fade-in');
+                content.classList.remove('slide-down');
+                content.classList.add('slide-up');
+            } else {
+                overlay.classList.remove('fade-in');
+                overlay.classList.add('fade-out');
+                content.classList.remove('slide-up');
+                content.classList.add('slide-down');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                }, 300);
+            }
+        }
+
+        function selectTrip(id) {
+            currentTripId = id;
+            saveToStorage();
+            renderApp();
+            toggleSelectorModal(false);
+        }
+
+        function addNewTrip() {
+            const trip = {
+                id: generateId(),
+                name: '新しい旅行',
+                scheduleData: '',
+                spotData: ''
+            };
+            trips.push(trip);
+            currentTripId = trip.id;
+            saveToStorage();
+            
+            toggleSelectorModal(false);
+            renderApp();
+            
+            // 少し待ってから編集画面を開く
+            setTimeout(() => {
+                openEditor();
+            }, 350);
+        }
+
+        function deleteTrip(id) {
+            if (trips.length === 1) {
+                alert('最後の旅行は削除できません。名前を変更して使い回してください。');
+                return;
+            }
+
+            if (!confirm('この旅行を削除してもよろしいですか？（この操作は取り消せません）')) {
+                return;
+            }
+
+            trips = trips.filter(t => t.id !== id);
+            
+            // 削除したのが現在選択中の旅行だった場合、別のものを選択
+            if (currentTripId === id) {
+                currentTripId = trips[0].id;
+                renderApp();
+            }
+            
+            saveToStorage();
+            renderTripList(); // リストを再描画
+        }
+
+        // === 初期化とイベントバインド ===
+        window.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            renderApp();
+
+            // イベントリスナー
+            document.getElementById('edit-btn').addEventListener('click', openEditor);
+            document.getElementById('close-input-btn').addEventListener('click', closeEditor);
+            document.getElementById('save-btn').addEventListener('click', saveEditorData);
+            
+            document.getElementById('tab-schedule').addEventListener('click', () => switchTab('schedule'));
+            document.getElementById('tab-spots').addEventListener('click', () => switchTab('spots'));
+
+            document.getElementById('trip-selector-trigger').addEventListener('click', () => toggleSelectorModal(true));
+            document.getElementById('close-selector-btn').addEventListener('click', () => toggleSelectorModal(false));
+            document.getElementById('trip-selector-overlay').addEventListener('click', () => toggleSelectorModal(false));
+            document.getElementById('add-trip-btn').addEventListener('click', addNewTrip);
         });
 
-        // 初期ロード時の処理
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedData = localStorage.getItem('savedScheduleData');
-            const tsvInput = document.getElementById('tsv-input');
-            
-            if (savedData) {
-                tsvInput.value = savedData;
-                renderSchedule(); // 保存されたデータがあれば自動描画
-            } else {
-                tsvInput.value = defaultData; // なければサンプルを表示
-            }
-        });
     </script>
 </body>
 </html>
