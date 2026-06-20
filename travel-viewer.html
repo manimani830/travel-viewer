@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅行スケジュールビューア</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* スクロールバーを隠す（スマホライクな見た目にするため） */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-200 flex justify-center min-h-screen">
+
+    <!-- スマホサイズのコンテナ -->
+    <div class="w-full max-w-md bg-white shadow-xl min-h-screen flex flex-col relative">
+        
+        <!-- ヘッダー -->
+        <header class="bg-blue-600 text-white p-4 shadow-md z-10 flex justify-between items-center sticky top-0">
+            <h1 class="text-lg font-bold">行程</h1>
+            <button id="edit-btn" class="text-sm bg-blue-700 hover:bg-blue-800 px-3 py-1 rounded">データ入力</button>
+        </header>
+
+        <!-- 入力エリア（初期表示、または「データ入力」ボタンで表示） -->
+        <div id="input-area" class="p-4 bg-gray-50 border-b relative z-0">
+            <p class="text-sm text-gray-600 mb-2 font-bold">
+                スプレッドシートのデータをコピーして、下の枠に貼り付けてください。
+            </p>
+            <textarea id="tsv-input" class="w-full h-32 p-2 border border-gray-300 rounded text-xs no-scrollbar focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-pre" placeholder="ここにスプレッドシートのセルを貼り付け"></textarea>
+            <button id="render-btn" class="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded shadow transition">
+                スケジュールに変換する
+            </button>
+        </div>
+
+        <!-- スケジュール表示エリア -->
+        <main id="schedule-container" class="flex-1 overflow-y-auto bg-white pb-20">
+            <!-- ここにJavaScriptでスケジュールが生成されます -->
+        </main>
+        
+        <!-- 下部ナビゲーション（AppSheet風の装飾） -->
+        <nav class="bg-white border-t p-2 flex justify-center items-center fixed bottom-0 w-full max-w-md">
+            <div class="flex flex-col items-center text-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                <span class="text-xs font-bold mt-1">行程</span>
+            </div>
+        </nav>
+    </div>
+
+    <script>
+        // デフォルトのサンプルデータ（ユーザーの入力を元に作成）
+        const defaultData = `日付	時間	種別	行動	移動・備考
+7/11(土)				
+07/11	9:30	出発	阿南市 -> 徳島空港	自家用車・約60分〜90分。空港駐車場を利用
+07/11	11:30	フライト	徳島空港 -> 福岡空港	JAL3564便（直行便）。12:35到着
+07/11	13:00	鉄道	福岡空港 -> 博多駅	地下鉄空港線（約5分）。特急への乗り継ぎ
+07/11	13:19	鉄道	博多駅 -> 黒崎駅	特急ソニック29号。13:56黒崎着。
+				
+7/12(日)				
+07/12	9:00	鉄道	通町筋 -> 上熊本	【熊本市電（B系統）】まずはB系統の北の起点へ。
+07/12	9:30	鉄道	上熊本 -> 新町	【熊本市電】折り返して新町へ。古い街並みの中を市電がすり抜けるハイライト区間。
+07/12	14:40	散策	木屋瀬駅周辺	途中下車。古い街並みを散策。`;
+
+        // 種別に応じた絵文字アイコンを返す関数
+        function getIcon(type) {
+            if (!type) return '';
+            if (type.includes('出発') || type.includes('車')) return '🚗';
+            if (type.includes('フライト') || type.includes('飛行機')) return '✈️';
+            if (type.includes('鉄道') || type.includes('電車') || type.includes('新幹線')) return '🚃';
+            if (type.includes('散策') || type.includes('徒歩') || type.includes('歩き')) return '🚶';
+            if (type.includes('バス')) return '🚌';
+            if (type.includes('宿泊') || type.includes('ホテル')) return '🏨';
+            if (type.includes('食事') || type.includes('レストラン') || type.includes('カフェ')) return '🍽️';
+            if (type.includes('観光')) return '📸';
+            return '🔹'; // デフォルトアイコン
+        }
+
+        // データを解析してHTMLを生成する関数
+        function renderSchedule() {
+            const inputData = document.getElementById('tsv-input').value;
+            if (!inputData.trim()) return;
+
+            // ローカルストレージに保存（リロードしてもデータが消えないように）
+            localStorage.setItem('savedScheduleData', inputData);
+
+            const lines = inputData.split('\n');
+            const schedule = {};
+
+            // TSV（タブ区切り）データを解析して日付ごとにグループ化
+            lines.forEach(line => {
+                const cols = line.split('\t');
+                
+                // 列が少ない、または完全な空白行はスキップ（AppSheetの Slice "ISNOTBLANK" と同じ効果）
+                if (cols.length < 3) return; 
+
+                const date = cols[0] ? cols[0].trim() : '';
+                const time = cols[1] ? cols[1].trim() : '';
+                const type = cols[2] ? cols[2].trim() : '';
+                const action = cols[3] ? cols[3].trim() : '';
+                const note = cols[4] ? cols[4].trim() : '';
+
+                // 見出し行「日付 時間 種別...」や、行動が入っていない行はスキップ
+                if (date === '日付' || !time || !action) return;
+
+                // 2026/07/11 のような年付きの表記や 7/11(土) のような表記を統一キーにするための処理
+                const dateKey = date; 
+
+                if (!schedule[dateKey]) {
+                    schedule[dateKey] = [];
+                }
+                
+                schedule[dateKey].push({ time, type, action, note });
+            });
+
+            // HTMLの構築
+            const container = document.getElementById('schedule-container');
+            container.innerHTML = '';
+
+            if (Object.keys(schedule).length === 0) {
+                container.innerHTML = '<p class="p-4 text-gray-500 text-center">有効なデータが見つかりません。形式を確認してください。</p>';
+                return;
+            }
+
+            for (const [date, items] of Object.entries(schedule)) {
+                // 日付ヘッダー
+                const dateHeader = document.createElement('div');
+                dateHeader.className = 'bg-gray-100 px-4 py-2 text-gray-700 font-bold border-b border-t text-sm sticky top-0 z-0';
+                dateHeader.textContent = date;
+                container.appendChild(dateHeader);
+
+                // スケジュールカードの生成（AppSheetのDeckビュー風）
+                items.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = 'border-b border-gray-200 p-4 hover:bg-gray-50 transition';
+                    
+                    const icon = getIcon(item.type);
+
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-1">
+                            <!-- 時間と行動（仮想列 [表示用_時間行動] と同じ効果） -->
+                            <div class="text-base text-gray-900 leading-tight">
+                                <span class="font-bold mr-1">${item.time}</span> ${item.action}
+                            </div>
+                            <!-- アイコンと種別（仮想列 [絵文字アイコン] と同じ効果） -->
+                            <div class="text-xs text-gray-500 flex items-center ml-2 whitespace-nowrap bg-gray-100 px-2 py-1 rounded">
+                                <span class="text-sm mr-1">${icon}</span>${item.type}
+                            </div>
+                        </div>
+                        <!-- 備考（もしあれば表示） -->
+                        ${item.note ? `<div class="text-sm text-gray-600 mt-2">${item.note}</div>` : ''}
+                    `;
+                    container.appendChild(card);
+                });
+            }
+
+            // 入力エリアを隠してスッキリさせる
+            document.getElementById('input-area').classList.add('hidden');
+        }
+
+        // イベントリスナーの設定
+        document.getElementById('render-btn').addEventListener('click', renderSchedule);
+        
+        document.getElementById('edit-btn').addEventListener('click', () => {
+            const inputArea = document.getElementById('input-area');
+            inputArea.classList.toggle('hidden');
+        });
+
+        // 初期ロード時の処理
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedData = localStorage.getItem('savedScheduleData');
+            const tsvInput = document.getElementById('tsv-input');
+            
+            if (savedData) {
+                tsvInput.value = savedData;
+                renderSchedule(); // 保存されたデータがあれば自動描画
+            } else {
+                tsvInput.value = defaultData; // なければサンプルを表示
+            }
+        });
+    </script>
+</body>
+</html>
