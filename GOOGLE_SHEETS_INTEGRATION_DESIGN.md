@@ -33,7 +33,7 @@ Google Cloud プロジェクトで Google Sheets API と Google Picker API を�
 
 OAuth の要求スコープは `https://www.googleapis.com/auth/drive.file` だけにする。Google Picker で利用者が選んだファイルへのアクセスに限定し、広範な Drive 閲覧権限や `spreadsheets.readonly` は要求しない。アプリは Sheets API の値読み取りエンドポイントだけを呼び、書き込み API は呼ばない。
 
-OAuth クライアントID、ブラウザ API キー、プロジェクト番号は静的サイトへ設定する。これらは秘密情報ではないが、API キーは `https://manimani830.github.io` のリファラと Google Picker API に制限する。クライアントシークレット、アクセストークン、リフレッシュトークンはコードやストレージに置かない。
+OAuth クライアントID、ブラウザ API キー、プロジェクト番号は静的サイトへ設定する。これらは秘密情報ではないが、API キーは `https://manimani830.github.io/*` と Google Picker の iframe 用 `https://docs.google.com/*` のリファラ、および Google Picker API に制限する。クライアントシークレット、アクセストークン、リフレッシュトークンはコードやストレージに置かない。
 
 ## データ契約
 
