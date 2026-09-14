@@ -196,7 +196,9 @@
         };
         const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
         const GOOGLE_SHEET_MIME_TYPE = 'application/vnd.google-apps.spreadsheet';
+        const GOOGLE_SHEET_CACHE_STORAGE_KEY = 'travelApp_googleSheetCache';
         const remoteTripCache = new Map();
+        let persistedGoogleTripCache = {};
         const refreshingTripIds = new Set();
         let googleInitPromise = null;
         let googleTokenClient = null;
@@ -205,6 +207,51 @@
 
         function isGoogleTrip(trip) {
             return trip && trip.source === 'google-sheet';
+        }
+
+        function isValidCachedTripData(data) {
+            return data
+                && typeof data.scheduleData === 'string'
+                && typeof data.spotData === 'string';
+        }
+
+        // Sheetから最後に正常取得した本文を端末内だけに保存する。
+        // トークンやGoogleアカウント情報は保存しない。
+        function loadGoogleTripCache() {
+            try {
+                const savedCache = JSON.parse(localStorage.getItem(GOOGLE_SHEET_CACHE_STORAGE_KEY) || '{}');
+                if (!savedCache || typeof savedCache !== 'object') return;
+
+                persistedGoogleTripCache = {};
+                for (const [tripId, data] of Object.entries(savedCache)) {
+                    const trip = trips.find(candidate => candidate.id === tripId);
+                    if (isGoogleTrip(trip) && isValidCachedTripData(data)) {
+                        const cachedData = {
+                            scheduleData: data.scheduleData,
+                            spotData: data.spotData
+                        };
+                        persistedGoogleTripCache[tripId] = cachedData;
+                        remoteTripCache.set(tripId, cachedData);
+                    }
+                }
+            } catch (error) {
+                // 壊れたキャッシュは無視し、次回の更新で正常なデータに置き換える。
+                persistedGoogleTripCache = {};
+            }
+        }
+
+        function saveGoogleTripCache(tripId, data) {
+            const cachedData = {
+                scheduleData: data.scheduleData,
+                spotData: data.spotData
+            };
+            persistedGoogleTripCache[tripId] = cachedData;
+            localStorage.setItem(GOOGLE_SHEET_CACHE_STORAGE_KEY, JSON.stringify(persistedGoogleTripCache));
+        }
+
+        function removeGoogleTripCache(tripId) {
+            delete persistedGoogleTripCache[tripId];
+            localStorage.setItem(GOOGLE_SHEET_CACHE_STORAGE_KEY, JSON.stringify(persistedGoogleTripCache));
         }
 
         function isGoogleConfigReady() {
@@ -353,9 +400,18 @@
             try {
                 const data = await fetchTripDataFromSheet(trip);
                 remoteTripCache.set(trip.id, data);
+                let cacheSaveFailed = false;
+                try {
+                    saveGoogleTripCache(trip.id, data);
+                } catch (error) {
+                    cacheSaveFailed = true;
+                }
                 trip.lastSyncedAt = new Date().toISOString();
                 saveToStorage();
                 if (trip.id === currentTripId) renderApp();
+                if (cacheSaveFailed) {
+                    alert('表示は更新しましたが、端末への保存に失敗しました。ブラウザの保存容量を確認してください。');
+                }
             } catch (error) {
                 if (trip.id === currentTripId && !remoteTripCache.has(trip.id)) {
                     renderConnectionMessage(error.message, true);
@@ -417,6 +473,8 @@
             if (trips.length > 0 && !trips.find(t => t.id === currentTripId)) {
                 currentTripId = trips[0].id;
             }
+
+            loadGoogleTripCache();
         }
 
         function saveToStorage() {
@@ -876,6 +934,7 @@
 
             trips = trips.filter(t => t.id !== id);
             remoteTripCache.delete(id);
+            removeGoogleTripCache(id);
             
             // 削除したのが現在選択中の旅行だった場合、別のものを選択
             if (currentTripId === id) {
