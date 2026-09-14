@@ -145,12 +145,17 @@
         // === ユーティリティ関数 ===
         function getIcon(type) {
             if (!type) return '';
+            if (type.includes('ドライブ')) return '🚙';
             if (type.includes('出発') || type.includes('車')) return '🚗';
             if (type.includes('フライト') || type.includes('飛行機')) return '✈️';
             if (type.includes('鉄道') || type.includes('電車') || type.includes('新幹線')) return '🚃';
             if (type.includes('散策') || type.includes('徒歩') || type.includes('歩き')) return '🚶';
             if (type.includes('バス')) return '🚌';
             if (type.includes('宿泊') || type.includes('ホテル')) return '🏨';
+            if (type.includes('温泉')) return '♨️';
+            if (type.includes('歴史')) return '🏯';
+            if (type.includes('街並み')) return '🏘️';
+            if (type.includes('グルメ')) return '🍜';
             if (type.includes('食事') || type.includes('レストラン') || type.includes('カフェ')) return '🍽️';
             if (type.includes('観光')) return '📸';
             return '🔹';
