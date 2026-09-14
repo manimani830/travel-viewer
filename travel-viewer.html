@@ -144,7 +144,8 @@
 
         // === ユーティリティ関数 ===
         function getIcon(type) {
-            if (!type) return '';
+            // 対応表にない種別・空欄は共通の既定アイコンにする。
+            if (!type) return '🔹';
             if (type.includes('ドライブ')) return '🚙';
             if (type.includes('出発') || type.includes('車')) return '🚗';
             if (type.includes('フライト') || type.includes('飛行機')) return '✈️';
