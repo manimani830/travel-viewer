@@ -299,14 +299,16 @@
 
         function validateSheetRows(scheduleRows, spotRows) {
             const scheduleHeaders = ['日付', '時間', '種別', '行動', '移動・備考'];
-            const spotHeaders = ['カテゴリ', '採用状況', 'スポット名', 'アクセス'];
+            // スポットは先頭3列だけをアプリ共通の項目として扱う。
+            // 4列目以降は、旅行ごとに「備考」「アクセス」「営業時間」など自由に追加できる。
+            const spotHeaders = ['カテゴリ', '採用状況', 'スポット名'];
             const matches = (actual, expected) => expected.every((header, index) => String(actual?.[index] || '').trim() === header);
 
             if (!matches(scheduleRows[0], scheduleHeaders)) {
                 throw new Error('「行程」タブの1行目は「日付 / 時間 / 種別 / 行動 / 移動・備考」である必要があります。');
             }
             if (!matches(spotRows[0], spotHeaders)) {
-                throw new Error('「スポット」タブの1行目は「カテゴリ / 採用状況 / スポット名 / アクセス」で始まる必要があります。');
+                throw new Error('「スポット」タブの1行目は「カテゴリ / 採用状況 / スポット名」で始まる必要があります。4列目以降の見出しは自由に変更できます。');
             }
         }
 
@@ -314,7 +316,8 @@
             const token = await getGoogleAccessToken(true);
             const params = new URLSearchParams();
             params.append('ranges', '行程!A:E');
-            params.append('ranges', 'スポット!A:E');
+            // スポットの4列目以降は任意項目のため、十分な列数まで取得する。
+            params.append('ranges', 'スポット!A:ZZ');
             params.set('valueRenderOption', 'FORMATTED_VALUE');
             const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(trip.spreadsheetId)}/values:batchGet?${params.toString()}`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -581,6 +584,7 @@
             }
 
             const lines = rawData.split('\n');
+            const headers = (lines.shift() || '').split('\t').map(header => header.trim());
             let hasValidData = false;
             const spots = [];
             const categories = new Set(); // カテゴリ抽出用
@@ -592,13 +596,17 @@
                 const category = cols[0] ? cols[0].trim() : '';
                 const status = cols[1] ? cols[1].trim() : '';
                 const name = cols[2] ? cols[2].trim() : '';
-                const access = cols[3] ? cols[3].trim() : '';
-                const description = cols[4] ? cols[4].trim() : '';
 
-                if (category === 'カテゴリ' || !name) return;
+                if (!name) return;
                 hasValidData = true;
+
+                // 4列目以降はヘッダー名と値の組として、列数にかかわらずカードへ表示する。
+                const details = cols.slice(3).map((value, index) => ({
+                    label: headers[index + 3] || `項目${index + 4}`,
+                    value: String(value || '').trim()
+                })).filter(detail => detail.label && detail.value);
                 
-                spots.push({ category, status, name, access, description });
+                spots.push({ category, status, name, details });
                 if (category) categories.add(category);
             });
 
@@ -672,18 +680,11 @@
                         ${spot.category ? `<span class="text-[10px] px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200 font-medium">${escapeHTML(spot.category)}</span>` : ''}
                         ${statusBadge}
                     </div>
-                    ${spot.access ? `
-                    <div class="text-xs text-gray-600 flex items-start gap-1.5 mb-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mt-0.5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span class="leading-tight">${escapeHTML(spot.access)}</span>
-                    </div>` : ''}
-                    ${spot.description ? `
+                    ${spot.details.map(detail => `
                     <div class="text-sm text-gray-700 bg-blue-50/50 p-3 rounded-lg mt-2 border border-blue-100 leading-relaxed">
-                        ${escapeHTML(spot.description)}
-                    </div>` : ''}
+                        <span class="block text-[10px] font-bold text-blue-600 mb-0.5">${escapeHTML(detail.label)}</span>
+                        <span>${escapeHTML(detail.value)}</span>
+                    </div>`).join('')}
                 `;
                 container.appendChild(card);
             });
