@@ -128,10 +128,6 @@
     </div>
 
     <script>
-        // === デフォルトデータ ===
-        const defaultData = `日付	時間	種別	行動	移動・備考\n7/11(土)\n07/11	9:30	出発	阿南市 -> 徳島空港	自家用車・約60分〜90分。空港駐車場を利用\n07/11	11:30	フライト	徳島空港 -> 福岡空港	JAL3564便（直行便）。12:35到着\n07/11	13:00	鉄道	福岡空港 -> 博多駅	地下鉄空港線（約5分）。特急への乗り継ぎ\n07/11	13:19	鉄道	博多駅 -> 黒崎駅	特急ソニック29号。13:56黒崎着。\n7/12(日)\n07/12	9:00	鉄道	通町筋 -> 上熊本	【熊本市電（B系統）】まずはB系統の北の起点へ。\n07/12	9:30	鉄道	上熊本 -> 新町	【熊本市電】折り返して新町へ。古い街並みの中を市電がすり抜けるハイライト区間。\n07/12	14:40	散策	木屋瀬駅周辺	途中下車。古い街並みを散策。`;
-        const defaultSpotData = `カテゴリ	採用状況	スポット名	アクセス	特徴・魅力（歴史的背景や見どころの解説）\n街並み	採用	新町・古町エリア（長崎次郎書店など）	熊本市電「新町」「洗馬橋」付近	熊本城の城下町として栄えた問屋街。大正4年築の「長崎次郎書店」などレトロな建築が軒を連ね、そのすぐ目の前を市電がゴトゴトと横切る極上空間。\n鉄道	採用	熊本市交通局 大江車庫	熊本市電「交通局前」すぐ	熊本市電の心臓部。敷地外からでも待機している色とりどりのレトロ車両や超低床電車を一望できる。\n食	採用	熊本ラーメン（黒亭など）	熊本駅周辺・市街地各所	豚骨スープに、焦がしニンニク油（マー油）とフライドガーリックを効かせた、ガツンとくるパンチの強さが特徴。`;
-
         // === アプリの状態管理 ===
         let trips = [];
         let currentTripId = null;
@@ -165,6 +161,17 @@
 
         function generateId() {
             return 'trip_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // スプレッドシートから貼り付けた文字列を、HTMLではなく文字として表示する
+        function escapeHTML(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            })[char]);
         }
 
         // === データ管理 ===
@@ -222,9 +229,9 @@
         function createDefaultTrip() {
             const trip = {
                 id: generateId(),
-                name: '九州旅行（サンプル）',
-                scheduleData: defaultData,
-                spotData: defaultSpotData
+                name: '新しい旅行',
+                scheduleData: '',
+                spotData: ''
             };
             trips.push(trip);
             currentTripId = trip.id;
@@ -295,7 +302,7 @@
                     : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>';
 
                 dateHeader.innerHTML = `
-                    <span>${date}</span>
+                    <span>${escapeHTML(date)}</span>
                     <span class="text-sm font-normal text-gray-500 flex items-center gap-1">
                         ${isFolded ? '開く' : '閉じる'} ${toggleIcon}
                     </span>
@@ -319,13 +326,13 @@
                         card.innerHTML = `
                             <div class="flex justify-between items-start mb-1">
                                 <div class="text-base text-gray-900 leading-tight pr-2">
-                                    <span class="font-bold mr-1 text-blue-900">${item.time}</span> ${item.action}
+                                    <span class="font-bold mr-1 text-blue-900">${escapeHTML(item.time)}</span> ${escapeHTML(item.action)}
                                 </div>
                                 <div class="text-xs text-gray-600 flex items-center ml-auto whitespace-nowrap bg-gray-100 px-2 py-1 rounded-md font-medium border border-gray-200">
-                                    <span class="text-sm mr-1">${icon}</span>${item.type}
+                                    <span class="text-sm mr-1">${icon}</span>${escapeHTML(item.type)}
                                 </div>
                             </div>
-                            ${item.note ? `<div class="text-sm text-gray-600 mt-2 pl-[3.25rem]">${item.note}</div>` : ''}
+                            ${item.note ? `<div class="text-sm text-gray-600 mt-2 pl-[3.25rem]">${escapeHTML(item.note)}</div>` : ''}
                         `;
                         container.appendChild(card);
                     });
@@ -391,7 +398,7 @@
                 Array.from(categories).forEach(cat => {
                     const btn = document.createElement('button');
                     btn.className = `px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors border flex items-center gap-1 ${currentSpotCategory === cat ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`;
-                    btn.innerHTML = `<span class="text-base">${getSpotIcon(cat)}</span><span>${cat}</span>`;
+                    btn.innerHTML = `<span class="text-base">${getSpotIcon(cat)}</span><span>${escapeHTML(cat)}</span>`;
                     btn.onclick = () => { currentSpotCategory = cat; renderSpots(rawData); };
                     filterWrapper.appendChild(btn);
                 });
@@ -413,7 +420,7 @@
                     let statusClass = 'bg-gray-100 text-gray-600 border-gray-200';
                     if (spot.status.includes('採用')) statusClass = 'bg-green-50 text-green-700 border-green-200 font-bold';
                     else if (spot.status.includes('候補')) statusClass = 'bg-orange-50 text-orange-700 border-orange-200';
-                    statusBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full border ${statusClass}">${spot.status}</span>`;
+                    statusBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full border ${statusClass}">${escapeHTML(spot.status)}</span>`;
                 }
 
                 // Google Map用のURLエンコードされたクエリ
@@ -424,14 +431,14 @@
                     <div class="flex justify-between items-start mb-2 gap-2">
                         <a href="https://www.google.com/maps/search/?api=1&query=${mapQuery}" target="_blank" rel="noopener noreferrer" class="flex items-start gap-2 group hover:opacity-70 transition active:opacity-50">
                             <span class="text-xl mt-0.5">${icon}</span>
-                            <h3 class="font-bold text-blue-600 text-base leading-tight underline decoration-blue-200 underline-offset-2 group-hover:text-blue-800">${spot.name}</h3>
+                            <h3 class="font-bold text-blue-600 text-base leading-tight underline decoration-blue-200 underline-offset-2 group-hover:text-blue-800">${escapeHTML(spot.name)}</h3>
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
                         </a>
                     </div>
                     <div class="flex flex-wrap gap-2 mb-3 items-center">
-                        ${spot.category ? `<span class="text-[10px] px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200 font-medium">${spot.category}</span>` : ''}
+                        ${spot.category ? `<span class="text-[10px] px-2 py-0.5 rounded border bg-gray-50 text-gray-600 border-gray-200 font-medium">${escapeHTML(spot.category)}</span>` : ''}
                         ${statusBadge}
                     </div>
                     ${spot.access ? `
@@ -440,11 +447,11 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span class="leading-tight">${spot.access}</span>
+                        <span class="leading-tight">${escapeHTML(spot.access)}</span>
                     </div>` : ''}
                     ${spot.description ? `
                     <div class="text-sm text-gray-700 bg-blue-50/50 p-3 rounded-lg mt-2 border border-blue-100 leading-relaxed">
-                        ${spot.description}
+                        ${escapeHTML(spot.description)}
                     </div>` : ''}
                 `;
                 container.appendChild(card);
@@ -461,16 +468,18 @@
                 li.className = `flex justify-between items-center p-3 rounded-xl border-2 cursor-pointer transition ${isActive ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`;
                 
                 li.innerHTML = `
-                    <div class="flex items-center gap-3 overflow-hidden flex-1" onclick="selectTrip('${trip.id}')">
+                    <button type="button" data-action="select" class="flex items-center gap-3 overflow-hidden flex-1 text-left">
                         <div class="w-2 h-2 rounded-full ${isActive ? 'bg-blue-500' : 'bg-transparent'} flex-shrink-0"></div>
-                        <span class="font-bold text-gray-800 truncate ${isActive ? 'text-blue-700' : ''}">${trip.name}</span>
-                    </div>
-                    <button onclick="deleteTrip('${trip.id}')" class="text-gray-400 hover:text-red-500 p-2 transition ml-2 flex-shrink-0" title="削除する">
+                        <span class="font-bold text-gray-800 truncate ${isActive ? 'text-blue-700' : ''}">${escapeHTML(trip.name)}</span>
+                    </button>
+                    <button type="button" data-action="delete" class="text-gray-400 hover:text-red-500 p-2 transition ml-2 flex-shrink-0" title="削除する">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
                         </svg>
                     </button>
                 `;
+                li.querySelector('[data-action="select"]').addEventListener('click', () => selectTrip(trip.id));
+                li.querySelector('[data-action="delete"]').addEventListener('click', () => deleteTrip(trip.id));
                 listContainer.appendChild(li);
             });
         }
